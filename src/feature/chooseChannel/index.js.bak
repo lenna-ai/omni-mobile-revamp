@@ -1,0 +1,454 @@
+import * as React from "react";
+import moment from "moment";
+import LinearGradient from "react-native-linear-gradient";
+import API from "./../../utils/api";
+import BSSheetChoose from "./BSSheet/BSSheetChoose";
+import BSConfirmLogout from "../tabsScreen/home/components/BSConfirmLogout";
+
+import { SvgUri } from "react-native-svg";
+import { getData } from "../../modules/services";
+import { moderateScale } from "../other/Scaling";
+import { encodeHashIds } from "../../utils/encode";
+import { saveData } from "./../../modules/localData";
+import { useSelector, useDispatch } from "react-redux";
+import { imageIconHeroIlustrasi } from "../../assets/icons";
+import { AuthContext } from "../../modules/navigation/navigationContext";
+import { onChooseActive } from "../../modules/redux/actions/inNavigation";
+import { addDataUserWasLogin } from "../../modules/redux/actions/inDataUserLogin";
+import { loadDataRoomReq } from "../../modules/redux/actions/home/inMain";
+import Icon from "react-native-remix-icon";
+import {
+  Text,
+  View,
+  FlatList,
+  Platform,
+  TextInput,
+  Dimensions,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  LogBox
+} from "react-native";
+// import { AlertToastFailed, AlertToastSuccess } from "../other/AlertToast";
+
+const dimenWidth = Dimensions.get("screen").width;
+const dimenHeight = Dimensions.get("screen").height;
+
+const ChooseChannel = ({ navigation }) => {
+  const dispatch = useDispatch();
+
+  const { signIn } = React.useContext(AuthContext);
+
+  const toastFailed = React.useRef(null);
+  const toastSuccess = React.useRef(null);
+  const refConfirmChoose = React.useRef(null);
+  const refRBSheetConfirmLogout = React.useRef(null);
+
+  const [loading, setLoading] = React.useState(false);
+  const [response, setResponse] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [dataProjet, setDataProjet] = React.useState([]);
+  const [dataFilter, setDataFilter] = React.useState([]);
+  const [itemClick, setItemClick] = React.useState(undefined);
+  const [searchChannel, setSearchChannel] = React.useState("");
+
+  const disUser = useSelector(state => state.mDataUserLogin);
+  let dataUser = disUser.dataUserWasLogin;
+  LogBox.ignoreAllLogs();
+
+  React.useEffect(
+    () => {
+      const unsubscribe = navigation.addListener("focus", () => {
+        setLoading(true);
+        getListChannels(dataUser);
+      });
+      return unsubscribe;
+    },
+    [navigation]
+  );
+
+  const getListChannels = async user => {
+    let headers = {
+      token: user.token,
+      userId: encodeHashIds(user.user_id)
+    };
+    try {
+      let res = await getData(API.PATH2 + "apps/" + user.id, headers);
+      console.log("Response GEt LIst Channel : ", res);
+      if (Array.isArray(res)) {
+        if (res.length != 0) {
+          setLoading(false);
+          setResponse(res);
+          setDataFilter(res);
+          setDataProjet(res);
+        }
+      }
+    } catch (e) {
+      console.log("e_list_channels", e);
+    }
+  };
+
+  const changeSearchChannel = txt => {
+    setSearchChannel(txt);
+    if (txt != "") {
+      let filteredName = dataProjet.filter(item => {
+        return item.name.toLowerCase().match(txt.toLowerCase());
+      });
+
+      if (filteredName.length != 0) {
+        setDataFilter([...filteredName]);
+      } else {
+        setDataFilter([]);
+      }
+    } else {
+      setDataFilter(response);
+    }
+  };
+
+  const goToDinamisPage = item => {
+    setItemClick(item);
+    refConfirmChoose.current.open();
+  };
+
+  const onKeyExtractor = React.useCallback(
+    (item, index) => item.id + index.toString()
+  );
+
+  const onRenderItem = React.useCallback(({ item }) => {
+    let dateCreate = moment(item.created_at).format("LL");
+    return (
+      <View key={item.id} style={styles.containerCard}>
+        <TouchableOpacity
+          onPress={() => goToDinamisPage(item)}
+          style={styles.cardItem}
+        >
+          <View style={styles.rowContentCard}>
+            {item.icon.split("-")[0] === "ri"
+              ? <Icon name={item.icon} size="60" color="red" />
+              : <SvgUri
+                  width={moderateScale(86)}
+                  height={moderateScale(86)}
+                  uri={`${API.BASE_URL}auth/public/${item.icon}`}
+                />}
+            <View style={styles.spaceBeetwenItemCard}>
+              <View>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: moderateScale(14),
+                    fontWeight: "bold"
+                  }}
+                >
+                  {item.name}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: moderateScale(12)
+                  }}
+                >
+                  {item.description}
+                </Text>
+              </View>
+
+              <Text
+                numberOfLines={2}
+                style={{
+                  fontSize: moderateScale(12)
+                }}
+              >
+                Created on {dateCreate}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  });
+
+  const confirmYes = async () => {
+    setIsLoading(true);
+    let headers = {
+      token: dataUser.token,
+      userId: encodeHashIds(dataUser.user_id)
+    };
+    try {
+      let res = await getData(
+        API.PATH + encodeHashIds(itemClick.id) + "/accessibility/get-role",
+        headers
+      );
+      let dataLogin = {
+        app_id: itemClick.id,
+        id: dataUser.id,
+        name: dataUser.name,
+        email: dataUser.email,
+        token: dataUser.token,
+        role: res,
+        online: true,
+        reason_offline: null,
+        user_id: dataUser.user_id
+      };
+
+      saveData("WAS_LOGIN", true);
+      saveData("DATA_LOGIN", dataLogin);
+      saveData("IS_CHOOSE_ACTIVE", true);
+      saveData("IS_CHOOSE_CHANNEL", false);
+      dispatch(onChooseActive(true));
+      dispatch(addDataUserWasLogin(dataLogin));
+      dispatch(loadDataRoomReq(true));
+
+      setTimeout(() => {
+        setIsLoading(false);
+        refConfirmChoose.current.close();
+        signIn();
+      }, 1000);
+    } catch (e) {
+      setIsLoading(false);
+      refConfirmChoose.current.close();
+      toastFailed.current.show(
+        "Terjadi kendala teknis, Harap coba lagi!!",
+        1000
+      );
+    }
+  };
+
+  const confirmNo = () => {
+    refConfirmChoose.current.close();
+    setItemClick(undefined);
+  };
+
+  return (
+    <View style={[styles.container, { alignItems: "center" }]}>
+      <LinearGradient
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        colors={["rgba(138, 219, 245, 0.5)", "rgba(37, 174, 218, 0.5) 100%)"]}
+        style={{
+          flex: 1,
+          width: dimenWidth
+        }}
+      >
+        <Text style={styles.containTitle}>Omni Messaging</Text>
+        <View
+          style={{
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          {imageIconHeroIlustrasi(
+            dimenWidth - moderateScale(156),
+            dimenWidth - moderateScale(156)
+          )}
+        </View>
+        <Text style={styles.containSubTitle}>
+          A place to orchestration your customer relation apps, single interface
+          to manage omnichannels and build a smarter chatbot without compromise.
+        </Text>
+      </LinearGradient>
+      <View style={styles.containSubHeader}>
+        <View style={styles.containInput}>
+          <TextInput
+            value={searchChannel}
+            keyboardType="default"
+            style={styles.textInput}
+            placeholder="Search..."
+            onChangeText={searchChannel => changeSearchChannel(searchChannel)}
+          />
+        </View>
+        <View
+          style={{
+            width: "20%",
+            alignItems: "center"
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => refRBSheetConfirmLogout.current.open()}
+          >
+            <Text
+              style={{
+                color: "#2787C4",
+                fontSize: moderateScale(14)
+              }}
+            >
+              Logout
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View
+        style={{
+          flex: 1,
+          width: dimenWidth,
+          backgroundColor: "#fff"
+        }}
+      >
+        {loading
+          ? <View
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              <ActivityIndicator size="large" color="#049FFF" />
+            </View>
+          : dataFilter.length
+            ? <FlatList
+                horizontal={true}
+                data={dataFilter}
+                renderItem={onRenderItem}
+                initialNumToRender={dataFilter.length}
+                windowSize={dataFilter.length / 2 * 21}
+                keyExtractor={onKeyExtractor}
+                contentContainerStyle={{
+                  flexWrap: "wrap",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  paddingHorizontal: moderateScale(8)
+                }}
+              />
+            : <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <Text style={styles.containEmpty}>Oops!!!</Text>
+                <Text style={styles.containSubEmpty}>
+                  Tidak ada Channel yang tersedia!
+                </Text>
+              </View>}
+      </View>
+
+      <BSSheetChoose
+        itemClick={itemClick}
+        confirmNo={confirmNo}
+        isLoading={isLoading}
+        confirmYes={confirmYes}
+        refConfirmChoose={refConfirmChoose}
+      />
+
+      <BSConfirmLogout refRBSheetConfirmLogout={refRBSheetConfirmLogout} />
+
+      {/* <AlertToastFailed toastFailed={toastFailed} />
+      <AlertToastSuccess toastSuccess={toastSuccess} /> */}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1
+  },
+  containSubHeader: {
+    width: dimenWidth,
+    height: moderateScale(64),
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
+    elevation: 5,
+    shadowRadius: 3.84,
+    shadowOpacity: 0.25,
+    shadowColor: "#000",
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: -12,
+    backgroundColor: "#fff",
+    justifyContent: "space-evenly"
+  },
+  containTitle: {
+    color: "#2787C4",
+    textTransform: "capitalize",
+    fontSize: moderateScale(34),
+    marginTop: moderateScale(16),
+    marginLeft: moderateScale(24),
+    marginBottom: moderateScale(-22)
+  },
+  containSubTitle: {
+    color: "#000",
+    fontSize: moderateScale(16),
+    marginTop: moderateScale(-22),
+    marginBottom: moderateScale(24),
+    marginLeft: moderateScale(24)
+  },
+  containEmpty: {
+    color: "#000",
+    textTransform: "capitalize",
+    fontSize: moderateScale(34),
+    marginBottom: moderateScale(8),
+    marginHorizontal: moderateScale(24)
+  },
+  containSubEmpty: {
+    color: "#000",
+    textAlign: "center",
+    fontSize: moderateScale(18),
+    marginHorizontal: moderateScale(24)
+  },
+  containInput: {
+    width: "70%",
+    flexDirection: "row",
+    backgroundColor: "#f3f3f3",
+    borderRadius: moderateScale(12)
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: "transparent",
+    paddingVertical: moderateScale(8),
+    paddingHorizontal: moderateScale(14)
+  },
+  btnOnLogin: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    height: moderateScale(44),
+    backgroundColor: "#2889C6",
+    borderRadius: moderateScale(8),
+    marginTop: moderateScale(38),
+    marginBottom: moderateScale(62)
+  },
+  textBtnOnLogin: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(22)
+  },
+  containerCard: {
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
+    marginTop: moderateScale(6),
+    marginBottom: moderateScale(10),
+    width: dimenWidth / 1.2 - moderateScale(24)
+  },
+  cardItem: {
+    backgroundColor: "#fff",
+    borderRadius: moderateScale(10),
+    marginTop: moderateScale(5),
+    justifyContent: "center",
+
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
+    elevation: 5,
+    shadowRadius: 3.84,
+    shadowOpacity: 0.25,
+    shadowColor: "#000",
+    width: "90%",
+    height: moderateScale(120),
+    padding: moderateScale(10)
+  },
+  rowContentCard: {
+    flexDirection: "row"
+  },
+  spaceBeetwenItemCard: {
+    flex: 1,
+    justifyContent: "space-between",
+    marginLeft: moderateScale(12)
+  }
+});
+
+export default React.memo(ChooseChannel);

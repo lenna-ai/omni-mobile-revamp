@@ -1,0 +1,230 @@
+import * as React from "react";
+
+import {
+  Text,
+  View,
+  Image,
+  Platform,
+  Dimensions,
+  StyleSheet,
+  TouchableOpacity
+} from "react-native";
+
+// Internal Export
+import API from "./../../utils/api";
+import BottomSheetStatus from "./components/BottomSheetStatus";
+import BottomSheetCamera from "./components/BottomSheetCamera";
+import BottomSheetLoading from "./components/BottomSheetLoading";
+
+import { moderateScale } from "../other/Scaling";
+import { saveData } from "./../../modules/localData";
+import { useDispatch, useSelector } from "react-redux";
+import { postDataLogin } from "./../../modules/services";
+import { onChooseActive } from "../../modules/redux/actions/inNavigation";
+import { AuthContext } from "./../../modules/navigation/navigationContext";
+import {
+  imageLogoLennaOmni,
+  imageLogoOmnimobile,
+  imageIllustrationBg
+} from "./../../assets/icons";
+import {
+  addDataUserWasLogin,
+  resetDataUserWasLogin
+} from "../../modules/redux/actions/inDataUserLogin";
+import {
+  onLoadingLogin,
+  onStatusMessageLogin,
+  onStatusLogin
+} from "./../../modules/redux/actions/inLogin";
+import { loadDataRoomReq } from "../../modules/redux/actions/home/inMain";
+
+const dimenWidth = Dimensions.get("screen").width;
+const dimenHeight = Dimensions.get("screen").height;
+
+const LoginScanQRCode = ({ navigation }) => {
+  const dispatch = useDispatch();
+  const refCamera = React.useRef(null);
+  const refRBSheetStatus = React.useRef(null);
+  const refRBSheetCamera = React.useRef(null);
+  const refRBSheetLoading = React.useRef(null);
+  const { signIn } = React.useContext(AuthContext);
+
+  const selData = useSelector(state => state.mDataLogin);
+
+  let dataIsStatusLogin = selData.isStatusLogin;
+  let dataIsLoadingLogin = selData.isLoadingLogin;
+
+  const actionHitLogin = data => {
+    loginHitApi(data);
+  };
+
+  React.useEffect(() => {
+    dispatch(resetDataUserWasLogin());
+  }, []);
+
+  const actionGoToEmailLogin = () => {
+    navigation.navigate("LoginEmail");
+  };
+
+  React.useEffect(
+    () => {
+      if (dataIsLoadingLogin) {
+        refRBSheetLoading.current.open();
+      } else if (dataIsStatusLogin) {
+        refRBSheetStatus.current.open();
+      }
+    },
+    [dataIsStatusLogin, dataIsLoadingLogin]
+  );
+
+  const loginHitApi = async data => {
+    const params = {
+      id: data,
+      fcm_key: "asdasdasdasdasdasd"
+    };
+    try {
+      let data = await postDataLogin(API.PATH + "mobile-omni/get-data", params);
+
+      console.log("data___Login", data);
+
+      if (data.success) {
+        saveData("WAS_LOGIN", true);
+        saveData("DATA_LOGIN", data.data);
+        saveData("IS_CHOOSE_ACTIVE", false);
+        saveData("IS_CHOOSE_CHANNEL", false);
+        dispatch(onChooseActive(false));
+        dispatch(addDataUserWasLogin(data.data));
+        dispatch(loadDataRoomReq(true));
+
+        setTimeout(() => {
+          refRBSheetLoading.current.close();
+          dispatch(onLoadingLogin(false));
+          signIn();
+        }, 1000);
+      } else {
+        refRBSheetLoading.current.close();
+        dispatch(
+          onStatusMessageLogin("Terjadi kendala \nnHarap Coba Kembali!")
+        );
+        dispatch(onStatusLogin(true));
+        dispatch(onLoadingLogin(false));
+      }
+    } catch (e) {
+      refRBSheetLoading.current.close();
+      dispatch(onStatusMessageLogin("Terjadi kendala \nnHarap Coba Kembali! "));
+      dispatch(onStatusLogin(true));
+      dispatch(onLoadingLogin(false));
+    }
+  };
+
+  const openBottomSheetScan = () => {
+    refRBSheetCamera.current.open();
+  };
+
+  return (
+    <View style={[styles.container, { alignItems: "center" }]}>
+      {imageIllustrationBg(dimenWidth, dimenHeight)}
+
+      <View style={styles.containerContent}>
+        <View style={{ marginBottom: moderateScale(76) }}>
+          {Platform.OS == "android"
+            ? imageLogoLennaOmni(moderateScale(100), moderateScale(46))
+            : <Image
+                style={{
+                  width: moderateScale(120),
+                  height: moderateScale(60),
+                  resizeMode: "contain"
+                }}
+                source={require("./../../assets/image/logo_lenna.png")}
+              />}
+        </View>
+        <View style={{ marginBottom: moderateScale(70) }}>
+          {imageLogoOmnimobile(
+            dimenWidth - moderateScale(160),
+            moderateScale(280)
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={() => actionGoToEmailLogin()}
+          // onPress={() => apiLoginTemporary()}
+          style={[
+            styles.bottomLogin,
+            {
+              borderWidth: 1,
+              borderColor: "#5588C3",
+              backgroundColor: "#00000000"
+            }
+          ]}
+        >
+          <Text style={[{ color: "#5588C3" }, styles.textBottomLogin]}>
+            Sign In
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* <ModalStatus /> */}
+      {/* <ModalLoading /> */}
+      <BottomSheetStatus refRBSheetStatus={refRBSheetStatus} />
+      <BottomSheetLoading refRBSheetLoading={refRBSheetLoading} />
+      <BottomSheetCamera
+        actionLogin={actionHitLogin}
+        refRBSheetCamera={refRBSheetCamera}
+        refCamera={refCamera}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1
+  },
+  containerContent: {
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  image: {
+    width: 120,
+    height: 80
+  },
+  textModal: {
+    marginVertical: 6,
+    textAlign: "center"
+  },
+  containerModal: {
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  preview: {
+    flex: 1,
+    justifyContent: "flex-end"
+  },
+  textBottomLogin: {
+    fontWeight: "bold",
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(22)
+  },
+  BSView: {
+    flex: 1,
+    alignItems: "center",
+    borderTopLeftRadius: 20,
+    backgroundColor: "white",
+    borderTopRightRadius: 20,
+    width: Dimensions.get("screen").width
+  },
+  bottomLogin: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: moderateScale(44),
+    borderRadius: moderateScale(8),
+    marginBottom: moderateScale(10),
+    width: dimenWidth - moderateScale(60)
+  }
+});
+
+export default React.memo(LoginScanQRCode);
